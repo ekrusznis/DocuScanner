@@ -34,7 +34,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.*
 
-class CameraFragment : Fragment(){
+class CameraFragment : Fragment() {
     private lateinit var viewModel: CameraViewModel
     private lateinit var convertButton: Button
     private lateinit var camera: CameraKitView
@@ -45,6 +45,7 @@ class CameraFragment : Fragment(){
     private val PERMISSION_CODE = 1000;
     private val IMAGE_CAPTURE_CODE = 1001
     var image_uri: Uri? = null
+    var colorClicked = 0
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -58,22 +59,21 @@ class CameraFragment : Fragment(){
         convertButton = root.findViewById(R.id.convertButton)
         image_view = root.findViewById(R.id.image_view)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (requireContext().checkSelfPermission(Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_DENIED ||
                 requireContext().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                == PackageManager.PERMISSION_DENIED){
+                == PackageManager.PERMISSION_DENIED
+            ) {
                 //permission was not enabled
                 val permission =
                     arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 //show popup to request permission
                 requestPermissions(permission, PERMISSION_CODE)
-            }
-            else{
+            } else {
                 openCamera()
             }
-        }
-        else{
+        } else {
             openCamera()
         }
         return root
@@ -84,12 +84,16 @@ class CameraFragment : Fragment(){
         viewModel = ViewModelProviders.of(this).get(CameraViewModel::class.java)
 
     }
+
     private fun openCamera() {
         toolbar.visibility = View.GONE
         val values = ContentValues()
         values.put(MediaStore.Images.Media.TITLE, "New Picture")
         values.put(MediaStore.Images.Media.DESCRIPTION, "From the Camera")
-        image_uri = requireActivity().contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        image_uri = requireActivity().contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            values
+        )
         //camera intent
         val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, image_uri)
@@ -97,40 +101,72 @@ class CameraFragment : Fragment(){
     }
 
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         //called when user presses ALLOW or DENY from Permission Request Popup
-        when(requestCode){
+        when (requestCode) {
             PERMISSION_CODE -> {
                 if (grantResults.size > 0 && grantResults[0] ==
-                    PackageManager.PERMISSION_GRANTED){
+                    PackageManager.PERMISSION_GRANTED
+                ) {
                     openCamera()
-                }
-                else{
+                } else {
                     Toast.makeText(requireContext(), "Permission denied", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
+    fun isOdd(n: Int): Boolean {
+        return (n % 2) != 0
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (resultCode == Activity.RESULT_OK){
+        if (resultCode == Activity.RESULT_OK) {
             image_view.visibility = View.VISIBLE
             toolbar.visibility = View.VISIBLE
             image_view.setImageURI(image_uri)
+
             blackWhiteColorImage.setOnClickListener(View.OnClickListener {
-                val bitmap = MediaStore.Images.Media.getBitmap(requireActivity().contentResolver, image_uri)
-            toGrayScale(bitmap)
+                colorClicked = colorClicked + 1
+                val bitmap =
+                    MediaStore.Images.Media.getBitmap(requireActivity().contentResolver, image_uri)
+                if (isOdd(colorClicked)) {
+                    image_view.setImageBitmap(gray(bitmap))
+                } else {
+                    image_view.setImageURI(image_uri)
+                }
             })
             convertButton.setOnClickListener(View.OnClickListener {
-                if (pdfNameInput.text.isNullOrEmpty()){
-                    Toast.makeText(requireContext(), "Please fill in name section", Toast.LENGTH_SHORT).show()
-                }else{
+                if (pdfNameInput.text.isNullOrEmpty()) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Please fill in name section",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
                     savePDF(image_uri.toString(), pdfNameInput.text.toString())
-                }})
+                }
+            })
         }
     }
 
-    fun savePDF(imageFileName: String, pdfName: String){
+    fun gray(bmpSrc: Bitmap): Bitmap {
+        val bmpMonochrome =
+            Bitmap.createBitmap(bmpSrc.width, bmpSrc.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmpMonochrome)
+        val cm = ColorMatrix()
+        cm.setSaturation(0f)
+        val paint = Paint()
+        paint.colorFilter = ColorMatrixColorFilter(cm)
+        canvas.drawBitmap(bmpSrc, 0f, 0f, paint)
+        return bmpMonochrome
+    }
+
+    fun savePDF(imageFileName: String, pdfName: String) {
         val document = Document()
         val directoryPath =
             Environment.getExternalStorageDirectory().toString()
@@ -152,27 +188,10 @@ class CameraFragment : Fragment(){
         document.add(image)
         document.close()
     }
-    fun toGrayScale(srcImage: Bitmap): Bitmap{
-        val bmpGrayScale = Bitmap.createBitmap(
-            srcImage.width,
-            srcImage.height,
-            Bitmap.Config.ARGB_8888)
 
-        val canvas = Canvas(bmpGrayScale)
-        val paint = Paint()
-
-        val cm = ColorMatrix()
-        cm.setSaturation(0f)
-        paint.colorFilter = ColorMatrixColorFilter(cm)
-        canvas.drawBitmap(srcImage, 0f, 0f, paint)
-
-        return bmpGrayScale
-    }
-    fun setBitmapToImage(greyPic: Bitmap){
-    }
-    fun shareFile(file: File){
+    fun shareFile(file: File) {
         val shareItent = Intent(Intent.ACTION_SEND)
-        if (file.exists()){
+        if (file.exists()) {
             shareItent.type = "application/pdf"
             shareItent.extras.apply {
                 Intent.EXTRA_STREAM
